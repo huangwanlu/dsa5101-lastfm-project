@@ -1,0 +1,32 @@
+# Local environments and agent working state
+.venv/
+.agents/
+
+# Raw and generated data or outputs
+data/raw/
+data/processed/
+outputs/
+artifacts/
+report/generated/
+
+# Python caches, packaging, and test artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
