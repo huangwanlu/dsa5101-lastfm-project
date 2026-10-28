@@ -1,0 +1,9 @@
+implicit==0.7.2
+ipykernel==7.1.0
+matplotlib==3.10.7
+nbclient==0.10.2
+nbformat==5.10.4
+networkx==3.2.1
+numpy==2.4.6
+pandas==3.1.0
+scipy==1.17.1
