@@ -9,6 +9,27 @@ outputs/
 artifacts/
 report/generated/
 
+# LaTeX auxiliary and build files
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+
+# Temporary files and directories
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.swp
+
 # Python caches, packaging, and test artifacts
 __pycache__/
 *.py[cod]
@@ -21,6 +42,8 @@ dist/
 
 # Notebook checkpoints
 .ipynb_checkpoints/
+*.ipynb_checkpoints/
+*.ipynb~
 
 # Editors and operating systems
 .DS_Store
