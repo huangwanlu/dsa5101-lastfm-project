@@ -44,12 +44,12 @@ def test_candidate_exclusion_and_tie_breaking_are_external_and_stable() -> None:
     assert profile.score_candidates(candidates).artist_id.tolist() == sorted(candidates)
 
 
-def test_missing_frozen_sparse_label_is_rejected_for_evaluation() -> None:
+def test_missing_fixed_sparse_label_is_rejected_for_evaluation() -> None:
     split = interactions([(1, i, 1) for i in range(1, 8)] + [(2, i, 1) for i in range(1, 8)])
     split["split"] = pd.Series(["train"] * 5 + ["validation", "test"] + ["train"] * 5 + ["validation", "test"], dtype="string")
     ledger = build_phase_ledger(split, phase="validation")
     labels = pd.DataFrame({"user_id": [1], "sparse": pd.array([True], dtype="boolean")})
-    with pytest.raises(ValueError, match="missing frozen sparse labels"):
+    with pytest.raises(ValueError, match="missing fixed sparse labels"):
         validate_complete_sparse_labels(ledger, labels)
 
 

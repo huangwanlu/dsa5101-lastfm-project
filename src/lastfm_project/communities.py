@@ -1,4 +1,4 @@
-"""Deterministic friendship communities for frozen ``lastfm-v1``."""
+"""Deterministic friendship communities for fixed ``lastfm-v1``."""
 
 from __future__ import annotations
 

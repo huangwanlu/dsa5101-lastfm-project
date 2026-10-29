@@ -1,7 +1,6 @@
 """DSA5101 Last.fm research project package."""
 
 from .data_loading import (
-    ARCHIVE_SHA256,
     ArchiveIntegrityError,
     DataValidationError,
     FriendshipTables,
@@ -78,10 +77,10 @@ from .validation import (
 )
 from .final_evaluation import (
     BOOTSTRAP_RESAMPLES,
-    FROZEN_ALS,
-    FROZEN_COMMUNITY_BETA,
-    FROZEN_HYBRID_BETA,
-    FROZEN_HYBRID_LAMBDA,
+    SELECTED_ALS,
+    SELECTED_COMMUNITY_BETA,
+    SELECTED_HYBRID_BETA,
+    SELECTED_HYBRID_LAMBDA,
     BootstrapResult,
     FinalAnalysis,
     H1Result,
@@ -93,11 +92,10 @@ from .final_evaluation import (
     paired_ndcg_bootstrap,
     run_final_analysis,
     run_h1_analysis,
-    verify_frozen_selection,
+    verify_selected_parameters,
 )
 
 __all__ = [
-    "ARCHIVE_SHA256",
     "ArchiveIntegrityError",
     "DataValidationError",
     "FriendshipTables",
@@ -158,10 +156,10 @@ __all__ = [
     "run_validation_selection",
     "select_best",
     "BOOTSTRAP_RESAMPLES",
-    "FROZEN_ALS",
-    "FROZEN_COMMUNITY_BETA",
-    "FROZEN_HYBRID_BETA",
-    "FROZEN_HYBRID_LAMBDA",
+    "SELECTED_ALS",
+    "SELECTED_COMMUNITY_BETA",
+    "SELECTED_HYBRID_BETA",
+    "SELECTED_HYBRID_LAMBDA",
     "BootstrapResult",
     "FinalAnalysis",
     "H1Result",
@@ -173,5 +171,5 @@ __all__ = [
     "paired_ndcg_bootstrap",
     "run_final_analysis",
     "run_h1_analysis",
-    "verify_frozen_selection",
+    "verify_selected_parameters",
 ]

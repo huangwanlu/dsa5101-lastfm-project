@@ -1,4 +1,4 @@
-"""Deterministic interaction splitting for the frozen ``lastfm-v1`` protocol."""
+"""Deterministic interaction splitting for the fixed ``lastfm-v1`` protocol."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class SplitResult:
 
 @dataclass(frozen=True)
 class SparseLabels:
-    """Frozen sparse-history labels and the nearest-rank cutoff."""
+    """Fixed sparse-history labels and the nearest-rank cutoff."""
 
     labels: pd.DataFrame
     cutoff: int
@@ -98,7 +98,7 @@ def _validate_result(source: pd.DataFrame, result: pd.DataFrame) -> None:
 
 
 def split_interactions(interactions: pd.DataFrame) -> SplitResult:
-    """Create the deterministic frozen 70/15/15 interaction split.
+    """Create the deterministic fixed 70/15/15 interaction split.
 
     ``interactions`` must be the validated P2.1 table. The input is never
     modified; every source pair and weight appears exactly once in ``table``.
@@ -143,7 +143,7 @@ def split_interactions(interactions: pd.DataFrame) -> SplitResult:
 
 
 def compute_sparse_labels(split: SplitResult | pd.DataFrame) -> SparseLabels:
-    """Freeze sparse labels from eligible users' split-train artist counts only."""
+    """Fix sparse labels from eligible users' split-train artist counts only."""
     table = split.table if isinstance(split, SplitResult) else split
     if tuple(table.columns) != SPLIT_COLUMNS:
         raise ValueError("split must have columns user_id, artist_id, weight, split")

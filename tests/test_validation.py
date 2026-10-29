@@ -18,7 +18,7 @@ def record(stage: str, parameters: dict[str, float | int], ndcg: float = 0.5) ->
     return ValidationRecord(stage, parameters, ndcg, 0.25, 1, (), 0.01)
 
 
-def test_frozen_grids_and_deterministic_tie_breaks() -> None:
+def test_fixed_grids_and_deterministic_tie_breaks() -> None:
     assert len(ALS_GRID) == 8
     assert HYBRID_LAMBDAS == (0.25, 0.5, 0.75)
     als = [record("als", {"factors": f, "regularization": r, "alpha": a}) for f in (32, 64) for r in (0.01, 0.1) for a in (1, 10)]

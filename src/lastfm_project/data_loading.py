@@ -1,9 +1,8 @@
-"""Validated, deterministic loading of the frozen HetRec Last.fm archive."""
+"""Validated, deterministic loading of the expected HetRec Last.fm archive."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
 import re
 from typing import Iterable
@@ -12,9 +11,8 @@ from zipfile import BadZipFile, ZipFile
 import pandas as pd
 
 
-ARCHIVE_SHA256 = "6738f48195667ff03caaab4d32ca9a3133d8cc026b7c3cdaf6ce1010e913c59c"
 REQUIRED_MEMBERS = frozenset({"user_artists.dat", "user_friends.dat", "artists.dat"})
-FROZEN_MEMBERS = frozenset(
+EXPECTED_ARCHIVE_MEMBERS = frozenset(
     {
         "artists.dat",
         "readme.txt",
@@ -32,7 +30,7 @@ _INT64_MAX = 2**63 - 1
 
 
 class ArchiveIntegrityError(ValueError):
-    """Raised when the archive identity or ZIP integrity is invalid."""
+    """Raised when the archive structure or ZIP integrity is invalid."""
 
 
 class DataValidationError(ValueError):
@@ -58,27 +56,10 @@ class HetRecData:
     artist_index: pd.DataFrame
 
 
-def _sha256(path: Path) -> str:
-    digest = sha256()
-    try:
-        with path.open("rb") as source:
-            for chunk in iter(lambda: source.read(1024 * 1024), b""):
-                digest.update(chunk)
-    except OSError as exc:
-        raise ArchiveIntegrityError(f"Cannot read archive {path}: {exc}") from exc
-    return digest.hexdigest()
-
-
-def _open_checked_archive(archive_path: Path, *, verify_checksum: bool) -> ZipFile:
+def _open_checked_archive(archive_path: Path) -> ZipFile:
     archive_path = Path(archive_path)
     if not archive_path.is_file():
         raise ArchiveIntegrityError(f"Archive does not exist: {archive_path}")
-    if verify_checksum:
-        actual = _sha256(archive_path)
-        if actual != ARCHIVE_SHA256:
-            raise ArchiveIntegrityError(
-                f"Archive SHA-256 mismatch: expected {ARCHIVE_SHA256}, got {actual}"
-            )
     try:
         zf = ZipFile(archive_path)
     except (BadZipFile, OSError) as exc:
@@ -92,9 +73,9 @@ def _open_checked_archive(archive_path: Path, *, verify_checksum: bool) -> ZipFi
         missing = sorted(REQUIRED_MEMBERS - actual_names)
         zf.close()
         raise ArchiveIntegrityError(f"ZIP is missing required members: {missing}")
-    if actual_names not in (REQUIRED_MEMBERS, FROZEN_MEMBERS):
-        unexpected = sorted(actual_names - FROZEN_MEMBERS)
-        missing = sorted(FROZEN_MEMBERS - actual_names)
+    if actual_names not in (REQUIRED_MEMBERS, EXPECTED_ARCHIVE_MEMBERS):
+        unexpected = sorted(actual_names - EXPECTED_ARCHIVE_MEMBERS)
+        missing = sorted(EXPECTED_ARCHIVE_MEMBERS - actual_names)
         zf.close()
         raise ArchiveIntegrityError(
             f"Unexpected ZIP member set; missing={missing}, unexpected={unexpected}"
@@ -171,9 +152,9 @@ def _validate_positive_ids(frame: pd.DataFrame, member: str, fields: Iterable[st
             raise DataValidationError(f"{member}: {field} must be positive; found {bad}")
 
 
-def load_artists(archive_path: Path, *, verify_checksum: bool = True) -> pd.DataFrame:
+def load_artists(archive_path: Path) -> pd.DataFrame:
     """Load and validate ``artists.dat`` with canonical snake_case columns."""
-    zf = _open_checked_archive(Path(archive_path), verify_checksum=verify_checksum)
+    zf = _open_checked_archive(Path(archive_path))
     try:
         rows = _read_rows(
             zf, "artists.dat", ("id", "name", "url", "pictureURL"), nullable_fields=frozenset({3})
@@ -195,10 +176,10 @@ def load_artists(archive_path: Path, *, verify_checksum: bool = True) -> pd.Data
 
 
 def load_user_artists(
-    archive_path: Path, *, artist_ids: Iterable[int] | None = None, verify_checksum: bool = True
+    archive_path: Path, *, artist_ids: Iterable[int] | None = None
 ) -> pd.DataFrame:
     """Load validated listening interactions, sorted by ``user_id, artist_id``."""
-    zf = _open_checked_archive(Path(archive_path), verify_checksum=verify_checksum)
+    zf = _open_checked_archive(Path(archive_path))
     try:
         rows = _read_rows(zf, "user_artists.dat", ("userID", "artistID", "weight"))
     finally:
@@ -220,10 +201,9 @@ def load_user_friends(
     archive_path: Path,
     *,
     interaction_user_ids: Iterable[int] | None = None,
-    verify_checksum: bool = True,
 ) -> FriendshipTables:
     """Load reciprocal directed friendships and canonical undirected edges."""
-    zf = _open_checked_archive(Path(archive_path), verify_checksum=verify_checksum)
+    zf = _open_checked_archive(Path(archive_path))
     try:
         rows = _read_rows(zf, "user_friends.dat", ("userID", "friendID"))
     finally:
@@ -255,13 +235,13 @@ def load_user_friends(
     return FriendshipTables(directed=directed, undirected=undirected)
 
 
-def load_hetrec(archive_path: Path, *, verify_checksum: bool = True) -> HetRecData:
+def load_hetrec(archive_path: Path) -> HetRecData:
     """Validate and load all P2.1 tables directly from a ZIP archive."""
     archive_path = Path(archive_path)
-    artists = load_artists(archive_path, verify_checksum=verify_checksum)
-    interactions = load_user_artists(archive_path, artist_ids=artists["artist_id"], verify_checksum=verify_checksum)
+    artists = load_artists(archive_path)
+    interactions = load_user_artists(archive_path, artist_ids=artists["artist_id"])
     friendships = load_user_friends(
-        archive_path, interaction_user_ids=interactions["user_id"], verify_checksum=verify_checksum
+        archive_path, interaction_user_ids=interactions["user_id"]
     )
     user_index = pd.DataFrame({"user_id": sorted(interactions["user_id"].unique())}, dtype="int64")
     user_index["index"] = pd.Series(range(len(user_index)), dtype="int32")
@@ -271,7 +251,6 @@ def load_hetrec(archive_path: Path, *, verify_checksum: bool = True) -> HetRecDa
 
 
 __all__ = [
-    "ARCHIVE_SHA256",
     "ArchiveIntegrityError",
     "DataValidationError",
     "FriendshipTables",

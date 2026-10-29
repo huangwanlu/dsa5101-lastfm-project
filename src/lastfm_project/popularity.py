@@ -37,7 +37,7 @@ def _ranked(scores: Mapping[int, float], candidate_artists: Iterable[int]) -> pd
 def validate_complete_sparse_labels(
     ledger: EvaluationPhaseLedger, sparse_labels: SparseLabels | pd.DataFrame
 ) -> None:
-    """Require exactly one frozen sparse label for every raw-eligible ledger user."""
+    """Require exactly one fixed sparse label for every raw-eligible ledger user."""
     labels = sparse_labels.labels if isinstance(sparse_labels, SparseLabels) else sparse_labels
     if not {"user_id", "sparse"}.issubset(labels.columns):
         raise ValueError("sparse labels must contain user_id and sparse")
@@ -45,9 +45,9 @@ def validate_complete_sparse_labels(
     supplied = labels.loc[labels["user_id"].isin(eligible), "user_id"].astype(int)
     missing = sorted(eligible - set(supplied))
     if missing:
-        raise ValueError(f"missing frozen sparse labels for eligible users: {missing[:10]}")
+        raise ValueError(f"missing fixed sparse labels for eligible users: {missing[:10]}")
     if supplied.duplicated().any() or labels.loc[labels["user_id"].isin(eligible), "sparse"].isna().any():
-        raise ValueError("frozen sparse labels must be complete and non-null for eligible users")
+        raise ValueError("fixed sparse labels must be complete and non-null for eligible users")
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ def fit_community_popularity(
     *,
     beta: float,
 ) -> CommunityPopularity:
-    """Fit community popularity with frozen shrinkage/backoff from fit rows."""
+    """Fit community popularity with fixed shrinkage/backoff from fit rows."""
     if beta not in BETA_VALUES:
         raise ValueError(f"beta must be one of {BETA_VALUES}")
     if tuple(membership.columns) != MEMBERSHIP_COLUMNS:

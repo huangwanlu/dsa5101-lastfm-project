@@ -1,4 +1,4 @@
-"""Frozen staged, validation-only model selection for ``lastfm-v1``."""
+"""Fixed staged, validation-only model selection for ``lastfm-v1``."""
 
 from __future__ import annotations
 
@@ -127,7 +127,7 @@ def _evaluate_hybrid_lambdas(
     profile: CommunityPopularity,
     membership,
 ) -> dict[float, MetricEvaluation]:
-    """Evaluate all frozen lambdas while sharing identical raw components."""
+    """Evaluate all fixed lambdas while sharing identical raw components."""
     users = tuple(ledger.table.loc[ledger.table["metric_eligible"], "user_id"].astype(int))
     rows: dict[float, list[tuple[int, float, float]]] = {value: [] for value in HYBRID_LAMBDAS}
     failures: dict[float, list[int]] = {value: [] for value in HYBRID_LAMBDAS}
@@ -184,10 +184,10 @@ def run_validation_selection(
     """Run the exact 8/3/9 staged grid using validation fitting data only."""
     if ledger.phase != "validation":
         raise ValueError("model selection may only use a validation-phase ledger")
-    frozen_labels = ledger.table.loc[
+    fixed_labels = ledger.table.loc[
         ledger.table["raw_evaluation_eligible"], ["user_id", "sparse"]
     ]
-    validate_complete_sparse_labels(ledger, frozen_labels)
+    validate_complete_sparse_labels(ledger, fixed_labels)
     started = perf_counter()
     records: list[ValidationRecord] = []
     als_models: dict[ALSConfig, ALSModel] = {}
@@ -259,7 +259,7 @@ def run_validation_selection(
             )
 
     best_hybrid = select_best(records, stage="hybrid")
-    sparse_values = frozen_labels["sparse"].astype(bool)
+    sparse_values = fixed_labels["sparse"].astype(bool)
     h3_estimable = bool(sparse_values.any() and (~sparse_values).any())
     metadata = {
         "protocol_id": "lastfm-v1",

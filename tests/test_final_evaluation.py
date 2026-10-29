@@ -12,7 +12,7 @@ from lastfm_project.final_evaluation import (
     full_catalog_ledger,
     paired_ndcg_bootstrap,
     run_h1_analysis,
-    verify_frozen_selection,
+    verify_selected_parameters,
 )
 from lastfm_project.recommendation import MISSING_REPRESENTATION, VALID, CandidateScores, als_candidate_scores
 
@@ -34,7 +34,7 @@ def test_paired_bootstrap_is_reproducible_and_preserves_pairing() -> None:
         paired_ndcg_bootstrap(als, hybrid.iloc[::-1].reset_index(drop=True))
 
 
-def test_frozen_selection_record_must_match_all_selected_parameters(tmp_path) -> None:
+def test_selection_record_must_match_all_selected_parameters(tmp_path) -> None:
     valid = tmp_path / "P4.md"
     valid.write_text(
         "ALS: factors 32, regularization 0.10, alpha 1, iterations 20, seed 5101.\n"
@@ -42,10 +42,10 @@ def test_frozen_selection_record_must_match_all_selected_parameters(tmp_path) ->
         "Hybrid: selected ALS plus beta 100 and lambda 0.25.\n",
         encoding="utf-8",
     )
-    verify_frozen_selection(valid)
+    verify_selected_parameters(valid)
     valid.write_text(valid.read_text(encoding="utf-8").replace("lambda 0.25", "lambda 0.50"), encoding="utf-8")
     with pytest.raises(ValueError, match="Hybrid"):
-        verify_frozen_selection(valid)
+        verify_selected_parameters(valid)
 
 
 def test_h1_peer_selection_activity_matching_reuse_and_jackknife() -> None:

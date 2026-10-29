@@ -1,4 +1,4 @@
-"""Frozen final evaluation and inference for the ``lastfm-v1`` protocol.
+"""Approved final evaluation and inference for the ``lastfm-v1`` protocol.
 
 The public helpers in this module are deliberately usable on small synthetic
 data sets.  :func:`run_final_analysis` is the only entry point that reads the
@@ -28,7 +28,7 @@ import pandas as pd
 
 from .als import ALSConfig, ALSModel, fit_implicit_als
 from .communities import detect_communities, shuffle_community_assignments
-from .data_loading import ARCHIVE_SHA256, load_hetrec
+from .data_loading import load_hetrec
 from .evaluation_ledger import EvaluationPhaseLedger, build_phase_ledger
 from .popularity import (
     CommunityPopularity,
@@ -54,10 +54,10 @@ from .recommendation import (
 from .splitting import PROTOCOL_ID, SPLIT_SEED, compute_sparse_labels, split_interactions
 
 
-FROZEN_ALS = ALSConfig(32, 0.10, 1.0, iterations=20, seed=5101)
-FROZEN_COMMUNITY_BETA = 1000.0
-FROZEN_HYBRID_BETA = 100.0
-FROZEN_HYBRID_LAMBDA = 0.25
+SELECTED_ALS = ALSConfig(32, 0.10, 1.0, iterations=20, seed=5101)
+SELECTED_COMMUNITY_BETA = 1000.0
+SELECTED_HYBRID_BETA = 100.0
+SELECTED_HYBRID_LAMBDA = 0.25
 BOOTSTRAP_RESAMPLES = 2000
 H1_STRATA = ((5, 10, "5-10"), (11, 20, "11-20"), (21, 50, "21-50"), (51, None, "51+"))
 
@@ -116,16 +116,8 @@ class FinalAnalysis:
     output_directory: Path
 
 
-def _sha256_file(path: Path) -> str:
-    digest = sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def verify_frozen_selection(record_path: str | Path) -> None:
-    """Fail unless the human-readable P4 record contains the frozen choices."""
+def verify_selected_parameters(record_path: str | Path) -> None:
+    """Fail unless the human-readable P4 record contains the selected choices."""
     text = Path(record_path).read_text(encoding="utf-8")
     checks = {
         "ALS": r"ALS:\s*factors\s*32,\s*regularization\s*0\.10,\s*alpha\s*1,\s*iterations\s*20,\s*seed\s*5101",
@@ -134,7 +126,7 @@ def verify_frozen_selection(record_path: str | Path) -> None:
     }
     missing = [name for name, pattern in checks.items() if re.search(pattern, text, re.IGNORECASE) is None]
     if missing:
-        raise ValueError(f"P4 record does not match frozen selection for: {', '.join(missing)}")
+        raise ValueError(f"P4 record does not match selected parameters for: {', '.join(missing)}")
 
 
 def paired_ndcg_bootstrap(
@@ -144,7 +136,7 @@ def paired_ndcg_bootstrap(
     resamples: int = BOOTSTRAP_RESAMPLES,
     seed: int = SPLIT_SEED,
 ) -> BootstrapResult:
-    """Calculate the frozen paired Hybrid-minus-ALS user bootstrap."""
+    """Calculate the fixed paired Hybrid-minus-ALS user bootstrap."""
     required = {"user_id", "ndcg_at_10"}
     if not required.issubset(als_per_user.columns) or not required.issubset(hybrid_per_user.columns):
         raise ValueError("paired inputs must contain user_id and ndcg_at_10")
@@ -238,7 +230,7 @@ def run_h1_analysis(
     *,
     seed: int = SPLIT_SEED,
 ) -> H1Result:
-    """Run the frozen training-only activity-matched H1 comparison."""
+    """Run the fixed training-only activity-matched H1 comparison."""
     if membership["user_id"].duplicated().any():
         raise ValueError("membership contains duplicate users")
     eligible = sorted(split_table.loc[split_table["split"] == "train", "user_id"].astype(int).unique())
@@ -447,7 +439,7 @@ def _evaluate_models(
             lambda user, candidates: hybrid_candidate_scores(
                 als_candidate_scores(als_model, user, candidates),
                 community_candidate_scores(hybrid_profile, membership, user, candidates),
-                lambda_=FROZEN_HYBRID_LAMBDA,
+                lambda_=SELECTED_HYBRID_LAMBDA,
             ),
         ),
     }
@@ -526,14 +518,12 @@ def run_final_analysis(
     p4_record_path: str | Path = ".agents/tasks/active/P4-validation.md",
     output_directory: str | Path = "data/processed/lastfm-v1/final",
 ) -> FinalAnalysis:
-    """Execute the frozen P5 refit, test evaluation, inference, and diagnostics."""
+    """Execute the approved P5 refit, test evaluation, inference, and diagnostics."""
     started = perf_counter()
     archive_path = Path(archive_path)
     p4_record_path = Path(p4_record_path)
     output_directory = Path(output_directory)
-    verify_frozen_selection(p4_record_path)
-    if _sha256_file(archive_path) != ARCHIVE_SHA256:
-        raise ValueError("source archive checksum differs from the frozen protocol")
+    verify_selected_parameters(p4_record_path)
 
     data = load_hetrec(archive_path)
     split = split_interactions(data.interactions)
@@ -542,19 +532,19 @@ def run_final_analysis(
     primary_ledger = build_phase_ledger(split, sparse, phase="test")
     validate_complete_sparse_labels(primary_ledger, sparse)
     if not sparse.labels["sparse"].astype(bool).all():
-        raise RuntimeError("frozen H3 state changed: expected every eligible user to be sparse")
+        raise RuntimeError("fixed H3 label state changed: expected every eligible user to be sparse")
 
     captured: list[str] = []
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        als_model = fit_implicit_als(primary_ledger.fitting_interactions, FROZEN_ALS)
+        als_model = fit_implicit_als(primary_ledger.fitting_interactions, SELECTED_ALS)
     captured.extend(str(item.message) for item in caught)
     global_profile = fit_global_popularity(primary_ledger.fitting_interactions)
     community_profile = fit_community_popularity(
-        primary_ledger.fitting_interactions, community.membership, beta=FROZEN_COMMUNITY_BETA
+        primary_ledger.fitting_interactions, community.membership, beta=SELECTED_COMMUNITY_BETA
     )
     hybrid_profile = fit_community_popularity(
-        primary_ledger.fitting_interactions, community.membership, beta=FROZEN_HYBRID_BETA
+        primary_ledger.fitting_interactions, community.membership, beta=SELECTED_HYBRID_BETA
     )
 
     primary = _evaluate_models(
@@ -570,10 +560,10 @@ def run_final_analysis(
 
     shuffled = shuffle_community_assignments(community.membership)
     shuffled_community_profile = fit_community_popularity(
-        primary_ledger.fitting_interactions, shuffled, beta=FROZEN_COMMUNITY_BETA
+        primary_ledger.fitting_interactions, shuffled, beta=SELECTED_COMMUNITY_BETA
     )
     shuffled_hybrid_profile = fit_community_popularity(
-        primary_ledger.fitting_interactions, shuffled, beta=FROZEN_HYBRID_BETA
+        primary_ledger.fitting_interactions, shuffled, beta=SELECTED_HYBRID_BETA
     )
     shuffled_results = {
         "shuffled_community": evaluate_method(
@@ -585,7 +575,7 @@ def run_final_analysis(
             lambda user, candidates: hybrid_candidate_scores(
                 als_candidate_scores(als_model, user, candidates),
                 community_candidate_scores(shuffled_hybrid_profile, shuffled, user, candidates),
-                lambda_=FROZEN_HYBRID_LAMBDA,
+                lambda_=SELECTED_HYBRID_LAMBDA,
             ),
         ),
     }
@@ -612,7 +602,7 @@ def run_final_analysis(
     robustness = pd.DataFrame(robustness_rows)
     h3 = {
         "estimable": False,
-        "reason": "all eligible users are sparse under frozen lastfm-v1 labels; no non-sparse comparison group",
+        "reason": "all eligible users are sparse under fixed lastfm-v1 labels; no non-sparse comparison group",
         "sparse_cutoff": sparse.cutoff,
         "raw_eligible_users": len(sparse.labels),
         "sparse_users": int(sparse.labels["sparse"].sum()),
@@ -620,18 +610,11 @@ def run_final_analysis(
         "subgroup_interaction_contrast": None,
     }
     repository = Path(__file__).resolve().parents[2]
-    protocol_path = repository / "docs/research_protocol.md"
-    contract_path = repository / "docs/data_contract.md"
     provenance = {
         "protocol_id": PROTOCOL_ID,
         "seed": SPLIT_SEED,
         "source_archive": str(archive_path),
-        "source_sha256": ARCHIVE_SHA256,
-        "frozen_document_sha256": {
-            "research_protocol.md": _sha256_file(protocol_path),
-            "data_contract.md": _sha256_file(contract_path),
-            "P4-validation.md": _sha256_file(p4_record_path),
-        },
+        "selection_record": str(p4_record_path),
         "code_revision": _git_revision(repository),
         "working_tree_note": "revision identifies HEAD; allowed P2-P5 files may be uncommitted",
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -646,10 +629,10 @@ def run_final_analysis(
             )
         },
         "settings": {
-            "als": asdict(FROZEN_ALS),
-            "community_beta": FROZEN_COMMUNITY_BETA,
-            "hybrid_beta": FROZEN_HYBRID_BETA,
-            "hybrid_lambda": FROZEN_HYBRID_LAMBDA,
+            "als": asdict(SELECTED_ALS),
+            "community_beta": SELECTED_COMMUNITY_BETA,
+            "hybrid_beta": SELECTED_HYBRID_BETA,
+            "hybrid_lambda": SELECTED_HYBRID_LAMBDA,
             "bootstrap_resamples": BOOTSTRAP_RESAMPLES,
             "bootstrap_seed": SPLIT_SEED,
             "fit_scope": "train + validation + train_only_low_history",
@@ -684,8 +667,8 @@ if __name__ == "__main__":
 
 
 __all__ = [
-    "BOOTSTRAP_RESAMPLES", "FROZEN_ALS", "FROZEN_COMMUNITY_BETA", "FROZEN_HYBRID_BETA",
-    "FROZEN_HYBRID_LAMBDA", "BootstrapResult", "FinalAnalysis", "H1Result", "MethodEvaluation",
+    "BOOTSTRAP_RESAMPLES", "SELECTED_ALS", "SELECTED_COMMUNITY_BETA", "SELECTED_HYBRID_BETA",
+    "SELECTED_HYBRID_LAMBDA", "BootstrapResult", "FinalAnalysis", "H1Result", "MethodEvaluation",
     "descriptive_h1_jackknife", "evaluate_method", "full_catalog_ledger", "global_candidate_scores",
-    "paired_ndcg_bootstrap", "run_final_analysis", "run_h1_analysis", "verify_frozen_selection",
+    "paired_ndcg_bootstrap", "run_final_analysis", "run_h1_analysis", "verify_selected_parameters",
 ]

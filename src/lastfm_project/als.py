@@ -1,9 +1,9 @@
-"""Implicit ALS for the frozen ``lastfm-v1`` protocol.
+"""Implicit ALS for the fixed ``lastfm-v1`` protocol.
 
 ``implicit`` 0.7.2 expects a user-by-item CSR whose stored values are the
 *complete* positive-entry confidences used by its solver.  We therefore store
 ``1 + alpha * log1p(weight)`` and leave the library's own ``alpha`` at one.
-This implements the frozen confidence exactly and avoids double scaling.
+This implements the fixed confidence exactly and avoids double scaling.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ class ALSConfig:
         if self.alpha not in ALS_ALPHAS:
             raise ValueError(f"alpha must be one of {ALS_ALPHAS}")
         if self.iterations != ALS_ITERATIONS or self.seed != ALS_SEED:
-            raise ValueError("iterations and seed are frozen at 20 and 5101")
+            raise ValueError("iterations and seed are fixed at 20 and 5101")
 
 
 ALS_GRID = tuple(

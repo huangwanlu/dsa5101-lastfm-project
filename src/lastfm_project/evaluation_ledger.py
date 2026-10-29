@@ -101,7 +101,7 @@ class EvaluationPhaseLedger:
 
 @dataclass(frozen=True)
 class EvaluationLedgers:
-    """Validation and test ledgers derived from one frozen split."""
+    """Validation and test ledgers derived from one fixed split."""
 
     validation: EvaluationPhaseLedger
     test: EvaluationPhaseLedger
@@ -171,7 +171,7 @@ def build_evaluation_ledgers(
     split: SplitResult | pd.DataFrame,
     sparse_labels: SparseLabels | pd.DataFrame | None = None,
 ) -> EvaluationLedgers:
-    """Build both phase ledgers using the same frozen sparse-label table."""
+    """Build both phase ledgers using the same fixed sparse-label table."""
     source = _table(split)
     sparse = _sparse_table(sparse_labels)
     return EvaluationLedgers(_build_phase(source, sparse, "validation"), _build_phase(source, sparse, "test"))

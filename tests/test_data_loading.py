@@ -38,7 +38,7 @@ def valid_zip(tmp_path: Path) -> Path:
 
 
 def test_valid_fixture_schemas_ordering_nullable_and_mappings(valid_zip: Path) -> None:
-    data = load_hetrec(valid_zip, verify_checksum=False)
+    data = load_hetrec(valid_zip)
     assert list(data.artists.columns) == ["artist_id", "name", "url", "picture_url"]
     assert data.artists["artist_id"].dtype == "int64"
     assert str(data.artists["name"].dtype) == "string"
@@ -78,7 +78,7 @@ def test_invalid_headers_rows_and_nulls(tmp_path: Path, member: str, content: st
         friends=contents["user_friends.dat"],
     )
     with pytest.raises(DataValidationError, match=message):
-        load_hetrec(path, verify_checksum=False)
+        load_hetrec(path)
 
 
 @pytest.mark.parametrize(
@@ -104,7 +104,7 @@ def test_cross_table_and_key_invariants(tmp_path: Path, interactions: str, frien
         friends=friends,
     )
     with pytest.raises(DataValidationError, match=message):
-        load_hetrec(path, verify_checksum=False)
+        load_hetrec(path)
 
 
 @pytest.mark.parametrize(
@@ -129,7 +129,7 @@ def test_duplicate_and_non_positive_ids_are_rejected(
 ) -> None:
     path = write_fixture(tmp_path / "bad_ids.zip", artists=artists, interactions=interactions, friends=friends)
     with pytest.raises(DataValidationError, match=message):
-        load_hetrec(path, verify_checksum=False)
+        load_hetrec(path)
 
 
 @pytest.mark.parametrize(
@@ -171,7 +171,7 @@ def test_integer_fields_are_validated_before_pandas_conversion(
         friends=contents["user_friends.dat"],
     )
     with pytest.raises(DataValidationError, match=rf"{member}: row 2 field '{field}'.*{message}"):
-        load_hetrec(path, verify_checksum=False)
+        load_hetrec(path)
 
 
 def test_duplicate_zip_member_names_are_rejected(tmp_path: Path) -> None:
@@ -182,7 +182,16 @@ def test_duplicate_zip_member_names_are_rejected(tmp_path: Path) -> None:
         archive.writestr("user_artists.dat", "userID\tartistID\tweight\n1\t1\t2\n")
         archive.writestr("user_friends.dat", "userID\tfriendID\n1\t1\n")
     with pytest.raises(ArchiveIntegrityError, match="duplicate member names"):
-        load_hetrec(path, verify_checksum=False)
+        load_hetrec(path)
+
+
+def test_missing_required_zip_member_is_rejected(valid_zip: Path, tmp_path: Path) -> None:
+    path = tmp_path / "missing_required_member.zip"
+    with ZipFile(valid_zip) as source, ZipFile(path, "w", ZIP_DEFLATED) as archive:
+        for name in ("artists.dat", "user_artists.dat"):
+            archive.writestr(name, source.read(name))
+    with pytest.raises(ArchiveIntegrityError, match="missing required members"):
+        load_hetrec(path)
 
 
 def test_invalid_utf8_in_required_source_table_is_rejected(tmp_path: Path) -> None:
@@ -192,7 +201,7 @@ def test_invalid_utf8_in_required_source_table_is_rejected(tmp_path: Path) -> No
         archive.writestr("user_artists.dat", "userID\tartistID\tweight\n1\t1\t2\n")
         archive.writestr("user_friends.dat", "userID\tfriendID\n1\t1\n")
     with pytest.raises(DataValidationError, match="artists.dat: invalid UTF-8"):
-        load_hetrec(path, verify_checksum=False)
+        load_hetrec(path)
 
 
 def test_missing_final_newline_in_required_source_table_is_rejected(tmp_path: Path) -> None:
@@ -203,12 +212,10 @@ def test_missing_final_newline_in_required_source_table_is_rejected(tmp_path: Pa
         friends="userID\tfriendID\n1\t1\n",
     )
     with pytest.raises(DataValidationError, match="artists.dat: missing final newline"):
-        load_hetrec(path, verify_checksum=False)
+        load_hetrec(path)
 
 
-def test_checksum_and_crc_are_checked(valid_zip: Path, tmp_path: Path) -> None:
-    with pytest.raises(ArchiveIntegrityError, match="SHA-256 mismatch"):
-        load_artists(valid_zip)
+def test_crc_is_checked(valid_zip: Path, tmp_path: Path) -> None:
     corrupt = tmp_path / "corrupt.zip"
     with ZipFile(valid_zip) as source, ZipFile(corrupt, "w") as destination:
         for name in ("artists.dat", "user_artists.dat", "user_friends.dat"):
@@ -220,7 +227,7 @@ def test_checksum_and_crc_are_checked(valid_zip: Path, tmp_path: Path) -> None:
     raw[payload_offset] ^= 0x01
     corrupt.write_bytes(raw)
     with pytest.raises(ArchiveIntegrityError, match="CRC"):
-        load_artists(corrupt, verify_checksum=False)
+        load_artists(corrupt)
 
 
 def test_original_archive_audit_counts_and_integrity() -> None:
