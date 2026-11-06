@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
 from math import ceil, floor
 from typing import Mapping
 
+import numpy as np
 import pandas as pd
 
 
@@ -53,14 +53,16 @@ def _allocation_counts(n: int) -> tuple[int, int, int]:
     return result  # type: ignore[return-value]
 
 
-def _rank_user_rows(user_id: int, rows: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    return sorted(
-        rows,
-        key=lambda row: (
-            sha256(f"{SPLIT_SEED}|{user_id}|{row[0]}".encode("ascii")).digest(),
-            row[0],
-        ),
-    )
+def _shuffle_user_rows(
+    user_id: int,
+    rows: list[tuple[int, int]],
+    *,
+    seed: int,
+) -> list[tuple[int, int]]:
+    ordered = sorted(rows, key=lambda row: row[0])
+    rng = np.random.default_rng(np.random.SeedSequence([seed, user_id]))
+    permutation = rng.permutation(len(ordered))
+    return [ordered[index] for index in permutation]
 
 
 def _validate_source(interactions: pd.DataFrame) -> None:
@@ -97,7 +99,11 @@ def _validate_result(source: pd.DataFrame, result: pd.DataFrame) -> None:
                 raise AssertionError(f"user {user_id} has incorrect allocation")
 
 
-def split_interactions(interactions: pd.DataFrame) -> SplitResult:
+def split_interactions(
+    interactions: pd.DataFrame,
+    *,
+    seed: int = SPLIT_SEED,
+) -> SplitResult:
     """Create the deterministic fixed 70/15/15 interaction split.
 
     ``interactions`` must be the validated P2.1 table. The input is never
@@ -108,7 +114,7 @@ def split_interactions(interactions: pd.DataFrame) -> SplitResult:
     assignments: list[tuple[int, int, int, str]] = []
     for user_id, group in source.groupby("user_id", sort=True):
         rows = [(int(row.artist_id), int(row.weight)) for row in group.itertuples(index=False)]
-        ranked = _rank_user_rows(int(user_id), rows)
+        ranked = _shuffle_user_rows(int(user_id), rows, seed=seed)
         if len(ranked) < ELIGIBILITY_THRESHOLD:
             assignments.extend((int(user_id), artist_id, weight, _LOW_HISTORY) for artist_id, weight in ranked)
             continue
@@ -133,8 +139,8 @@ def split_interactions(interactions: pd.DataFrame) -> SplitResult:
     }
     metadata = {
         "protocol_id": PROTOCOL_ID,
-        "seed": SPLIT_SEED,
-        "method": "per-user SHA-256 ranking with largest-remainder apportionment",
+        "seed": seed,
+        "method": "per-user seeded NumPy shuffle with largest-remainder apportionment",
         "eligibility_threshold": ELIGIBILITY_THRESHOLD,
         "proportions": _PROPORTIONS,
         "tie_break": "train, validation, test",

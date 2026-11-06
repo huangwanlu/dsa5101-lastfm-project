@@ -61,7 +61,7 @@ The tabular artifacts and split manifest below are proposed and not yet created;
 | Artifact | Required fields | Integrity rules |
 |---|---|---|
 | `interaction_splits.parquet` | `user_id:int64`, `artist_id:int64`, `weight:int64`, `split:string` | Exact one-to-one copy of every raw interaction; `split` in `train`, `validation`, `test`, `train_only_low_history`; primary key retained; sorted as specified |
-| `split_manifest.json` | source archive path, seed `5101`, eligibility threshold `7`, allocation method, hash-ranking specification, per-split user/pair counts | Recomputable from validated raw interactions; row counts and split invariants must match the table |
+| `split_manifest.json` | source archive path, seed `5101`, eligibility threshold `7`, allocation method, per-user seeded-shuffle specification, per-split user/pair counts | Recomputable from validated raw interactions; row counts and split invariants must match the table |
 | `user_index.parquet` | `user_id:int64`, `index:int32` | One row per interaction user; sorted IDs; indices exactly `0..n-1` |
 | `artist_index.parquet` | `artist_id:int64`, `index:int32` | One row per catalog artist; sorted IDs; indices exactly `0..n-1` |
 | `fit_artist_index_<phase>.parquet` | `artist_id:int64`, `index:int32` | Exact sorted distinct artists in phase fitting set, for `validation` or `test` |
@@ -73,7 +73,7 @@ The tabular artifacts and split manifest below are proposed and not yet created;
 
 ## Split and partition invariants
 
-The exact proposed splitter is defined in the protocol: seed 5101; per-user SHA-256 ranking of `5101|user_id|artist_id`; largest-remainder 70/15/15 allocation with train/validation/test tie priority; `n >= 7` for evaluation eligibility. The contract additionally requires:
+The exact proposed splitter is defined in the protocol: seed 5101; per-user NumPy shuffle after sorting by `artist_id`, using `SeedSequence([5101, user_id])`; largest-remainder 70/15/15 allocation with train/validation/test tie priority; `n >= 7` for evaluation eligibility. The contract additionally requires:
 
 1. Every raw interaction appears in exactly one split row with identical IDs and weight; no synthesized zero interactions or duplicate pairs.
 2. For each user with `n >= 7`, split sizes equal the specified apportionment and each of train/validation/test is nonempty. For `n < 7`, all rows are `train_only_low_history` and none are held out.

@@ -37,13 +37,13 @@ def test_paired_bootstrap_is_reproducible_and_preserves_pairing() -> None:
 def test_selection_record_must_match_all_selected_parameters(tmp_path) -> None:
     valid = tmp_path / "P4.md"
     valid.write_text(
-        "ALS: factors 32, regularization 0.10, alpha 1, iterations 20, seed 5101.\n"
+        "ALS: factors 32, regularization 0.01, alpha 1, iterations 20, seed 5101.\n"
         "Community: beta 1,000.\n"
-        "Hybrid: selected ALS plus beta 100 and lambda 0.25.\n",
+        "Hybrid: selected ALS plus beta 100 and lambda 0.50.\n",
         encoding="utf-8",
     )
     verify_selected_parameters(valid)
-    valid.write_text(valid.read_text(encoding="utf-8").replace("lambda 0.25", "lambda 0.50"), encoding="utf-8")
+    valid.write_text(valid.read_text(encoding="utf-8").replace("lambda 0.50", "lambda 0.25"), encoding="utf-8")
     with pytest.raises(ValueError, match="Hybrid"):
         verify_selected_parameters(valid)
 
@@ -66,6 +66,30 @@ def test_h1_peer_selection_activity_matching_reuse_and_jackknife() -> None:
     assert len(result.anchors) == 6
     assert int(result.peer_reuse["use_count"].sum()) == 12
     assert np.isfinite(result.jackknife_se)
+
+
+def test_h1_peer_selection_respects_eligibility_and_seed() -> None:
+    rows = []
+    for user in range(1, 13):
+        rows.extend((user, artist + user, 1, "train") for artist in range(1, 6))
+    membership = pd.DataFrame({
+        "user_id": list(range(1, 13)),
+        "community_id": [1] * 4 + [2] * 4 + [3] * 4,
+    }).astype("int64")
+    first = run_h1_analysis(_split(rows), membership, seed=5101).anchors
+    again = run_h1_analysis(_split(list(reversed(rows))), membership.iloc[::-1], seed=5101).anchors
+    changed = run_h1_analysis(_split(rows), membership, seed=5102).anchors
+    pd.testing.assert_frame_equal(first, again)
+    assert not first[["within_peer_id", "cross_peer_id"]].equals(
+        changed[["within_peer_id", "cross_peer_id"]]
+    )
+    community = membership.set_index("user_id")["community_id"]
+    assert (first["anchor_user_id"] != first["within_peer_id"]).all()
+    assert all(
+        community.loc[row.anchor_user_id] == community.loc[row.within_peer_id]
+        and community.loc[row.anchor_user_id] != community.loc[row.cross_peer_id]
+        for row in first.itertuples(index=False)
+    )
 
 
 def test_jackknife_removes_every_row_where_user_participates() -> None:

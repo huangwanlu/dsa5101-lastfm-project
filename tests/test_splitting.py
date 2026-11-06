@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -17,14 +16,10 @@ def interactions_for_counts(counts: dict[int, int]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["user_id", "artist_id", "weight"]).astype("int64")
 
 
-def expected_rank(user_id: int, artist_ids: list[int]) -> list[int]:
-    return sorted(
-        artist_ids,
-        key=lambda artist_id: (
-            hashlib.sha256(f"5101|{user_id}|{artist_id}".encode("ascii")).digest(),
-            artist_id,
-        ),
-    )
+def expected_order(user_id: int, artist_ids: list[int], seed: int = 5101) -> list[int]:
+    ordered = sorted(artist_ids)
+    rng = np.random.default_rng(np.random.SeedSequence([seed, user_id]))
+    return [ordered[index] for index in rng.permutation(len(ordered))]
 
 
 @pytest.mark.parametrize(
@@ -38,15 +33,30 @@ def test_boundary_counts_and_nonempty_eligible_partitions(count: int, expected: 
     assert result.table[["user_id", "artist_id", "weight"]].dtypes.astype(str).tolist() == ["int64"] * 3
 
 
-def test_hash_ranking_and_assignment_are_reproducible() -> None:
+def test_seeded_per_user_shuffle_and_assignment_are_reproducible() -> None:
     source = interactions_for_counts({3: 10})
     result = split_interactions(source)
-    ranked = expected_rank(3, list(range(1, 11)))
+    ranked = expected_order(3, list(range(1, 11)))
     expected = dict(zip(ranked, ["train"] * 7 + ["validation"] * 2 + ["test"]))
     actual = dict(zip(result.table["artist_id"], result.table["split"]))
     assert actual == expected
     assert result.metadata["seed"] == 5101
     assert result.metadata["protocol_id"] == "lastfm-v1"
+
+
+def test_different_seeds_can_change_assignments() -> None:
+    source = interactions_for_counts({1: 20, 2: 20})
+    first = split_interactions(source, seed=5101).table
+    second = split_interactions(source, seed=5102).table
+    assert not first["split"].equals(second["split"])
+
+
+def test_one_users_records_do_not_change_another_users_split() -> None:
+    original = interactions_for_counts({1: 10, 2: 10})
+    expanded = interactions_for_counts({1: 10, 2: 20})
+    first = split_interactions(original).table.query("user_id == 1").reset_index(drop=True)
+    second = split_interactions(expanded).table.query("user_id == 1").reset_index(drop=True)
+    pd.testing.assert_frame_equal(first, second)
 
 
 def test_shuffled_input_is_identical_and_input_is_unmodified() -> None:

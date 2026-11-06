@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from hashlib import sha256
 import importlib.metadata
 import json
 import os
@@ -54,12 +53,14 @@ from .recommendation import (
 from .splitting import PROTOCOL_ID, SPLIT_SEED, compute_sparse_labels, split_interactions
 
 
-SELECTED_ALS = ALSConfig(32, 0.10, 1.0, iterations=20, seed=5101)
+SELECTED_ALS = ALSConfig(32, 0.01, 1.0, iterations=20, seed=5101)
 SELECTED_COMMUNITY_BETA = 1000.0
 SELECTED_HYBRID_BETA = 100.0
-SELECTED_HYBRID_LAMBDA = 0.25
+SELECTED_HYBRID_LAMBDA = 0.50
 BOOTSTRAP_RESAMPLES = 2000
 H1_STRATA = ((5, 10, "5-10"), (11, 20, "11-20"), (21, 50, "21-50"), (51, None, "51+"))
+H1_WITHIN_NAMESPACE = 1
+H1_CROSS_NAMESPACE = 2
 
 
 @dataclass(frozen=True)
@@ -120,9 +121,9 @@ def verify_selected_parameters(record_path: str | Path) -> None:
     """Fail unless the human-readable P4 record contains the selected choices."""
     text = Path(record_path).read_text(encoding="utf-8")
     checks = {
-        "ALS": r"ALS:\s*factors\s*32,\s*regularization\s*0\.10,\s*alpha\s*1,\s*iterations\s*20,\s*seed\s*5101",
+        "ALS": r"ALS:\s*factors\s*32,\s*regularization\s*0\.01,\s*alpha\s*1,\s*iterations\s*20,\s*seed\s*5101",
         "Community": r"Community:\s*beta\s*1,?000",
-        "Hybrid": r"Hybrid:.*beta\s*100\s+and\s+lambda\s*0\.25",
+        "Hybrid": r"Hybrid:.*beta\s*100\s+and\s+lambda\s*0\.50",
     }
     missing = [name for name, pattern in checks.items() if re.search(pattern, text, re.IGNORECASE) is None]
     if missing:
@@ -170,17 +171,20 @@ def _stratum(count: int) -> str:
     raise ValueError(f"eligible training-history count is outside H1 strata: {count}")
 
 
-def _hashed_peer(anchor: int, peers: Iterable[int], kind: str, *, seed: int) -> int:
-    choices = sorted(
-        (int(peer) for peer in peers),
-        key=lambda peer: (
-            sha256(f"{seed}|H1|{anchor}|{kind}|{peer}".encode("ascii")).digest(),
-            peer,
-        ),
-    )
+def _select_peer(
+    anchor: int,
+    peers: Iterable[int],
+    comparison_namespace: int,
+    *,
+    seed: int,
+) -> int:
+    choices = sorted(int(peer) for peer in peers)
     if not choices:
         raise ValueError("cannot select from an empty H1 peer set")
-    return choices[0]
+    rng = np.random.default_rng(
+        np.random.SeedSequence([seed, anchor, comparison_namespace])
+    )
+    return choices[int(rng.integers(len(choices)))]
 
 
 def _jaccard(left: frozenset[int], right: frozenset[int]) -> float:
@@ -257,8 +261,12 @@ def run_h1_analysis(
         if not within or not cross:
             continue
         candidate_counts[strata[anchor]] += 1
-        within_peer = _hashed_peer(anchor, within, "within", seed=seed)
-        cross_peer = _hashed_peer(anchor, cross, "cross", seed=seed)
+        within_peer = _select_peer(
+            anchor, within, H1_WITHIN_NAMESPACE, seed=seed
+        )
+        cross_peer = _select_peer(
+            anchor, cross, H1_CROSS_NAMESPACE, seed=seed
+        )
         within_similarity = _jaccard(artist_sets[anchor], artist_sets[within_peer])
         cross_similarity = _jaccard(artist_sets[anchor], artist_sets[cross_peer])
         rows.append((
